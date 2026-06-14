@@ -33,7 +33,10 @@ async def main():
                 await app.get_chat(DUMP_CHANNEL_ID)
                 logger.info("Successfully fetched and cached DUMP_CHANNEL_ID using raw API.")
             except Exception as e2:
-                logger.error(f"Failed to resolve DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) via raw API after standard method failed. Error: {e}. Raw fallback error: {e2}")
+                if "CHANNEL_INVALID" in str(e2):
+                    logger.error(f"Failed to resolve DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}). Since you are running in Docker without a persistent .session volume, please forward a message from the Dump Channel to the bot so it can cache the channel's access hash, or ensure the bot is an admin in the channel. Raw error: {e2}")
+                else:
+                    logger.error(f"Failed to resolve DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) via raw API after standard method failed. Error: {e}. Raw fallback error: {e2}")
 
     await pyrogram.idle()
     await app.stop()
