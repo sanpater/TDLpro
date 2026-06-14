@@ -21,7 +21,7 @@ async def main():
             await app.get_chat(DUMP_CHANNEL_ID)
             logger.info(f"Successfully fetched DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) chat info.")
         except Exception as e:
-            logger.warning(f"Could not fetch DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) directly: {e}. Attempting to resolve via raw API...")
+            # Silently fallback to raw API to cache the chat if standard get_chat fails
             try:
                 from pyrogram.raw.functions.channels import GetChannels
                 from pyrogram.raw.types import InputChannel
@@ -33,7 +33,7 @@ async def main():
                 await app.get_chat(DUMP_CHANNEL_ID)
                 logger.info("Successfully fetched and cached DUMP_CHANNEL_ID using raw API.")
             except Exception as e2:
-                logger.error(f"Failed to resolve DUMP_CHANNEL_ID via raw API. Ensure the bot is an admin in the channel. Error: {e2}")
+                logger.error(f"Failed to resolve DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) via raw API after standard method failed. Error: {e}. Raw fallback error: {e2}")
 
     await pyrogram.idle()
     await app.stop()
