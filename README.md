@@ -10,53 +10,45 @@ This repository contains tools for interacting with TeraBox share links. It has 
 
 ---
 
-## 1. API (Vercel)
+## Telegram Bot (Railway / Docker)
 
-The API extracts file information from TeraBox share links.
+A Telegram bot that acts as a TeraBox downloader, built with Pyrogram and Asyncio. It uses a custom flow API to bypass Terabox limits and handles large files and HLS streams natively using FFMPEG.
 
-**Deployment:**
-1. Navigate to the `api/` directory.
-2. Deploy directly to Vercel using the provided `vercel.json`.
-3. Make sure to set up your environment variables (like `COOKIE_JSON`) in the Vercel dashboard.
+### Running with Docker
 
-**Local Usage:**
-```bash
-cd api
-pip install -r requirements.txt
-python main.py
-```
+You can easily run the bot using the provided Dockerfile. This ensures all dependencies, including FFMPEG, are correctly installed.
 
----
+1.  Build the Docker image:
+    ```bash
+    cd bot
+    docker build -t terabox-bot .
+    ```
 
-## 2. Telegram Bot (Railway)
+2.  Run the Docker container, providing your environment variables:
+    ```bash
+    docker run -d --name terabox-bot \
+        -e BOT_TOKEN="your_bot_token" \
+        -e BOT_API_ID="your_api_id" \
+        -e BOT_API_HASH="your_api_hash" \
+        -e MONGO_URI="your_mongodb_uri" \
+        -e OWNER_ID="your_telegram_id" \
+        terabox-bot
+    ```
 
-A Telegram bot that acts as a TeraBox downloader.
+### Running Locally without Docker
+
+**Requirements:**
+- Python 3.9+
+- FFMPEG installed on your system (required for processing streaming video links).
 
 **Deployment:**
 1. Navigate to the `bot/` directory.
-2. Deploy to Railway or a similar service.
-3. Set your environment variables (`BOT_TOKEN`, `BOT_API_ID`, `BOT_API_HASH`, `API_URL`) in your hosting provider's dashboard.
-   - `API_URL`: The URL of your deployed Vercel API (e.g., `https://td-l.vercel.app/api2`). If you don't set this, it will default to a placeholder.
-   - Note: The bot no longer requires a `COOKIE_JSON`.
-
-**Local Usage:**
-```bash
-cd bot
-pip install -r requirements.txt
-python bot.py
-```
-
----
-
-## 3. Standalone Script (`dl.py`)
-
-A single-file script that allows you to manually fetch direct download links for any TeraBox URL. It requires no external dependencies other than `aiohttp`.
-
-**Usage:**
-```bash
-python3 dl.py "https://1024terabox.com/s/1_8lO2hqOmptouVBSn8tJcg" -c "YOUR_NDUS_COOKIE_HERE"
-```
-
-**Options:**
-- `-c, --cookie`: **Required.** Your TeraBox `ndus` cookie value.
-- `-p, --password`: Optional. The password if the link is protected.
+2. Install dependencies: `pip install -r requirements.txt`
+3. Install FFMPEG:
+   - Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y ffmpeg`
+   - MacOS: `brew install ffmpeg`
+4. Set your environment variables (`BOT_TOKEN`, `BOT_API_ID`, `BOT_API_HASH`, `MONGO_URI`) in a `.env` file or directly in your hosting provider's dashboard.
+5. Run the bot:
+    ```bash
+    python main.py
+    ```
