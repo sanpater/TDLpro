@@ -162,7 +162,6 @@ def register_message_handlers(app: Client):
                                 stdout=asyncio.subprocess.PIPE,
                                 stderr=asyncio.subprocess.PIPE
                             )
-                            # Let it download in background, monitor progress roughly
                             while process.returncode is None:
                                 await asyncio.sleep(2)
                                 await progress_bar(0, 1, status_msg, "Downloading HLS Stream...", start_time, last_update_time)

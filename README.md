@@ -5,14 +5,13 @@ This repository contains tools for interacting with TeraBox share links. It has 
 ## Repository Structure
 
 - `api/`: The Flask API designed to be hosted on Vercel. It provides endpoints for resolving TeraBox file links.
-- `bot/`: The Telegram bot designed to be hosted on Railway. It uses pyrogram to automatically download and send files from TeraBox links sent in chat.
 - `dl.py`: A standalone Python script you can run locally to manually download or fetch direct links from a TeraBox share URL using your own cookie.
 
 ---
 
 ## Telegram Bot (Railway / Docker)
 
-A Telegram bot that acts as a TeraBox downloader, built with Pyrogram and Asyncio. It uses a custom flow API to bypass Terabox limits and handles large files and HLS streams natively using FFMPEG.
+A Telegram bot that acts as a TeraBox downloader, built with Pyrogram and Asyncio. It uses a custom flow API to bypass Terabox limits and handles large files and HLS streams natively using FFMPEG. The source code is in the root directory.
 
 ### Running with Docker
 
@@ -20,7 +19,6 @@ You can easily run the bot using the provided Dockerfile. This ensures all depen
 
 1.  Build the Docker image:
     ```bash
-    cd bot
     docker build -t terabox-bot .
     ```
 
@@ -42,13 +40,12 @@ You can easily run the bot using the provided Dockerfile. This ensures all depen
 - FFMPEG installed on your system (required for processing streaming video links).
 
 **Deployment:**
-1. Navigate to the `bot/` directory.
-2. Install dependencies: `pip install -r requirements.txt`
-3. Install FFMPEG:
+1. Install dependencies: `pip install -r requirements.txt`
+2. Install FFMPEG:
    - Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y ffmpeg`
    - MacOS: `brew install ffmpeg`
-4. Set your environment variables (`BOT_TOKEN`, `BOT_API_ID`, `BOT_API_HASH`, `MONGO_URI`) in a `.env` file or directly in your hosting provider's dashboard.
-5. Run the bot:
+3. Set your environment variables (`BOT_TOKEN`, `BOT_API_ID`, `BOT_API_HASH`, `MONGO_URI`) in a `.env` file or directly in your hosting provider's dashboard.
+4. Run the bot:
     ```bash
     python main.py
     ```

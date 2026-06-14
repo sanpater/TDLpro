@@ -140,13 +140,6 @@ def register_commands(app: Client):
         )
         await message.reply_text(text)
 
-    @app.on_message(filters.command("log") & filters.user(OWNER_ID) if OWNER_ID else filters.command("log") & filters.user([]))
-    async def log_command(client: Client, message: Message):
-        if os.path.exists("bot.log"):
-            await message.reply_document("bot.log")
-        else:
-            await message.reply_text("Log file not found.")
-
     @app.on_message(filters.command("cancel"))
     async def cancel_command(client: Client, message: Message):
         user_id = message.from_user.id
