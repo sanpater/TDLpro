@@ -158,7 +158,7 @@ def register_message_handlers(app: Client):
                         if ".m3u8" in direct_link or "m3u8" in direct_link.lower() or "my-streaming" in direct_link:
                             await status_msg.edit_text(f"📥 Downloading Stream: {filename}\nThis might take a while...")
                             process = await asyncio.create_subprocess_exec(
-                                "ffmpeg", "-y", "-i", direct_link, "-c", "copy", "-bsf:a", "aac_adtstoasc", temp_file,
+                                "ffmpeg", "-allowed_extensions", "ALL", "-protocol_whitelist", "file,http,https,tcp,tls,crypto", "-y", "-i", direct_link, "-c", "copy", "-bsf:a", "aac_adtstoasc", temp_file,
                                 stdout=asyncio.subprocess.PIPE,
                                 stderr=asyncio.subprocess.PIPE
                             )
