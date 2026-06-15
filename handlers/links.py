@@ -13,7 +13,7 @@ from core.database import db
 from core.flowapi import get_flowvideo_links
 from utils.helpers import format_bytes, format_time, get_video_duration
 from utils.progress import progress_bar
-from utils.download import fast_download
+from utils.download import fast_download, ffmpeg_download
 
 @Client.on_message(filters.text & filters.regex(r"http[s]?://[^\s]+"))
 async def handle_link(client: Client, message: Message):
@@ -193,6 +193,15 @@ async def handle_link(client: Client, message: Message):
                 if direct_link.endswith(".zip") or "file_name=" in direct_link and direct_link.split("file_name=")[-1].endswith(".zip"):
                     download_is_zip = True
 
+                is_m3u8 = ".m3u8" in direct_link.lower() or "get_m3u8" in direct_link.lower()
+
+                # If it's an m3u8 stream, ensure the target file is an mp4
+                if is_m3u8:
+                    if not safe_filename.endswith(".mp4"):
+                        # strip extension if any and append mp4
+                        safe_filename = os.path.splitext(safe_filename)[0] + ".mp4"
+                        filename = safe_filename
+
                 temp_file = f"temp_{message.id}_{safe_filename}"
                 temp_file_dl = temp_file + (".zip" if download_is_zip and not temp_file.endswith(".zip") else "")
                 temp_thumb = f"thumb_{message.id}.jpg"
@@ -211,16 +220,26 @@ async def handle_link(client: Client, message: Message):
 
                     # Download main file fast
                     # No cookies are passed, TeraBox direct links usually work without them for the specific short-lived token
-                    success = await fast_download(
-                        direct_link,
-                        download_headers,
-                        temp_file_dl,
-                        status_msg,
-                        action_text,
-                        start_time,
-                        last_update_time,
-                        max_concurrent=20
-                    )
+                    if is_m3u8:
+                        success = await ffmpeg_download(
+                            direct_link,
+                            temp_file_dl,
+                            status_msg,
+                            action_text,
+                            start_time,
+                            last_update_time
+                        )
+                    else:
+                        success = await fast_download(
+                            direct_link,
+                            download_headers,
+                            temp_file_dl,
+                            status_msg,
+                            action_text,
+                            start_time,
+                            last_update_time,
+                            max_concurrent=20
+                        )
 
                     if not success:
                         await status_msg.edit_text(f"❌ Failed to download {filename}\nMake sure your API server's cookies are valid.")
