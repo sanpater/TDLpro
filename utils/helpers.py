@@ -1,7 +1,9 @@
 import subprocess
+import logging
 from hachoir.parser import createParser
 from hachoir.metadata import extractMetadata
-from config import logger
+
+logger = logging.getLogger(__name__)
 
 def format_bytes(size):
     size = int(size)
@@ -15,7 +17,6 @@ def format_bytes(size):
 
 def get_video_duration(filepath):
     try:
-        # First try using ffprobe (requires ffmpeg installed on host)
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries",
              "format=duration", "-of",
@@ -27,7 +28,6 @@ def get_video_duration(filepath):
         return int(duration)
     except Exception as ffmpeg_err:
         logger.warning(f"ffprobe failed for {filepath}: {ffmpeg_err}, falling back to hachoir")
-        # Fallback to hachoir
         try:
             parser = createParser(filepath)
             if not parser:
