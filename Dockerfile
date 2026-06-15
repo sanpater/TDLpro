@@ -1,25 +1,26 @@
-FROM python:3.11-slim
+FROM ubuntu:24.04
+
+# Prevent interactive prompts during apt installations
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Set working directory
 WORKDIR /app
 
-# Install necessary packages
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget xz-utils \
+    python3.12 \
+    python3-pip \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install modern static ffmpeg (Debian's default is too old for required HLS/M3U8 flags)
-RUN wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz && \
-    tar -xf ffmpeg-release-amd64-static.tar.xz && \
-    mv ffmpeg-*/ffmpeg /usr/local/bin/ && \
-    mv ffmpeg-*/ffprobe /usr/local/bin/ && \
-    rm -rf ffmpeg-release-amd64-static.tar.xz ffmpeg-*
+# Set python3.12 as default
+RUN ln -s /usr/bin/python3.12 /usr/bin/python || true
 
 # Copy requirements file
 COPY requirements.txt .
 
-# Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install python dependencies (using PEP 668 bypass for system python if necessary, or simply pip3)
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Copy all the rest of the application files
 COPY . .
