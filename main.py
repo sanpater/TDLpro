@@ -2,6 +2,7 @@ import pyrogram.utils
 from pyrogram import Client
 import asyncio
 from config import API_ID, API_HASH, BOT_TOKEN, DUMP_CHANNEL_ID, logger
+from web import run_web_server
 
 # Monkey-patch Pyrogram's hardcoded limits to avoid "Peer id invalid" errors for newer channels
 pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
@@ -48,5 +49,18 @@ async def main():
     logger.info("Bot stopped.")
 
 if __name__ == "__main__":
+    import traceback
+
+    logger.info("Starting web server on port 7860...")
+    try:
+        run_web_server()
+    except Exception as e:
+        logger.error(f"Failed to start web server: {e}")
+        logger.error(traceback.format_exc())
+
     logger.info("Starting bot...")
-    app.run(main())
+    try:
+        app.run(main())
+    except Exception as e:
+        logger.error(f"Bot stopped due to an exception: {e}")
+        logger.error(traceback.format_exc())

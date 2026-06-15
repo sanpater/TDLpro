@@ -31,9 +31,14 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
                 # We can't easily get precise progress from ffmpeg without parsing stderr deeply,
                 # but we can at least show it's working
                 await asyncio.sleep(5)
-                # Keep the original action_text and prevent message from remaining static
-                # Here we just rely on the bot not crashing, though a custom ffmpeg progress parser is better if needed.
-                pass
+                try:
+                    if os.path.exists(filepath):
+                        current_size = os.path.getsize(filepath)
+                        # We don't know the total size for m3u8 streams easily, so we just pass 0 for total
+                        # to indicate unknown total size, but we can show downloaded size and speed.
+                        await progress_bar(current_size, 0, status_msg, action_text, start_time, last_update_time)
+                except Exception:
+                    pass
 
         monitor_task = asyncio.create_task(monitor_process())
         stdout, stderr = await process.communicate()
