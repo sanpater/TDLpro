@@ -15,9 +15,9 @@ def format_bytes(size):
 
 def get_video_duration(filepath):
     try:
-        # First try using ffprobe (requires ffmpeg installed on host)
+        # First try using ffprobe (requires ffmpeg/lolas installed on host)
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries",
+            ["lolasprobe", "-v", "error", "-show_entries",
              "format=duration", "-of",
              "default=noprint_wrappers=1:nokey=1", filepath],
             stdout=subprocess.PIPE,

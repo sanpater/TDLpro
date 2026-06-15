@@ -5,6 +5,52 @@ import asyncio
 from config import logger
 from utils.progress import progress_bar
 
+async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, last_update_time):
+    """Downloads an m3u8/HLS stream using ffmpeg (renamed to lolas)."""
+    try:
+        cmd = [
+            "lolas",
+            "-y",
+            "-allowed_extensions", "ALL",
+            "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
+            "-i", url,
+            "-c", "copy",
+            "-bsf:a", "aac_adtstoasc",
+            filepath
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        # Periodically update status while downloading
+        async def monitor_process():
+            while process.returncode is None:
+                # We can't easily get precise progress from ffmpeg without parsing stderr deeply,
+                # but we can at least show it's working
+                await asyncio.sleep(5)
+                # Keep the original action_text and prevent message from remaining static
+                # Here we just rely on the bot not crashing, though a custom ffmpeg progress parser is better if needed.
+                pass
+
+        monitor_task = asyncio.create_task(monitor_process())
+        stdout, stderr = await process.communicate()
+        monitor_task.cancel()
+
+        if process.returncode != 0:
+            logger.error(f"ffmpeg failed: {stderr.decode()}")
+            return False
+
+        if os.path.exists(filepath):
+            return True
+        return False
+
+    except Exception as e:
+        logger.error(f"ffmpeg_download error: {e}")
+        return False
+
 async def fast_download(url, headers, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=20):
     """Downloads a file fast by using multiple concurrent connections if the server supports range requests."""
     # Create an explicit TCP connector with a low limit to prevent pooling overhead
