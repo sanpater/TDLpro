@@ -42,8 +42,8 @@ async def main():
             except Exception as e2:
                 logger.error(f"Failed to resolve DUMP_CHANNEL_ID via raw API. Ensure the bot is an admin in the channel. Error: {e2}")
 
-    import pyrogram
-    await pyrogram.idle()
+    from pyrogram import idle
+    await idle()
     await app.stop()
     logger.info("Bot stopped.")
 
