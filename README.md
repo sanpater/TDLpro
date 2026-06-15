@@ -1,54 +1,58 @@
-# TeraBox API & Telegram Bot
+# TeraBox Telegram Bot
 
-This repository contains tools for interacting with TeraBox share links. It has been separated into two independent projects for easier hosting, alongside a standalone script for manual local usage.
+This repository contains a high-speed Telegram bot for downloading files from TeraBox share links. The codebase is organized into a modular structure for easy maintenance and readability.
 
 ## Repository Structure
 
-- `api/`: The Flask API designed to be hosted on Vercel. It provides endpoints for resolving TeraBox file links.
-- `bot/`: The Telegram bot designed to be hosted on Railway. It uses pyrogram to automatically download and send files from TeraBox links sent in chat.
-- `dl.py`: A standalone Python script you can run locally to manually download or fetch direct links from a TeraBox share URL using your own cookie.
+- `main.py`: The entry point for running the bot.
+- `config.py`: Environment variable loading and configuration.
+- `core/`: Core functionality, including database interactions (`database.py`) and API logic (`flowapi.py`).
+- `handlers/`: Telegram message and callback handlers (e.g., `commands.py`, `links.py`, `callbacks.py`).
+- `utils/`: Helper scripts, downloading logic, and progress bar generation.
 
 ---
 
-## Telegram Bot (Railway / Docker)
+## 1. Deployment (Docker)
 
-A Telegram bot that acts as a TeraBox downloader, built with Pyrogram and Asyncio. It uses a custom flow API to bypass Terabox limits and handles large files and HLS streams natively using FFMPEG.
+You can deploy the bot easily using the provided `Dockerfile`.
 
-### Running with Docker
+**Prerequisites:**
+1. A Telegram Bot Token from [BotFather](https://t.me/BotFather).
+2. Telegram API ID and API HASH from [my.telegram.org](https://my.telegram.org/).
+3. Create a `.env` file containing your credentials (or pass them to the docker container).
 
-You can easily run the bot using the provided Dockerfile. This ensures all dependencies, including FFMPEG, are correctly installed.
+**Example `.env` file:**
+```env
+BOT_TOKEN=your_bot_token_here
+BOT_API_ID=your_api_id
+BOT_API_HASH=your_api_hash
+OWNER_ID=your_user_id
+# Optional
+DUMP_CHANNEL_ID=-100xxxxxxx
+```
 
-1.  Build the Docker image:
-    ```bash
-    cd bot
-    docker build -t terabox-bot .
-    ```
+**Build and Run:**
+```bash
+docker build -t terabox_bot .
+docker run -d --env-file .env terabox_bot
+```
 
-2.  Run the Docker container, providing your environment variables:
-    ```bash
-    docker run -d --name terabox-bot \
-        -e BOT_TOKEN="your_bot_token" \
-        -e BOT_API_ID="your_api_id" \
-        -e BOT_API_HASH="your_api_hash" \
-        -e MONGO_URI="your_mongodb_uri" \
-        -e OWNER_ID="your_telegram_id" \
-        terabox-bot
-    ```
+---
 
-### Running Locally without Docker
+## 2. Local Usage
 
-**Requirements:**
-- Python 3.9+
-- FFMPEG installed on your system (required for processing streaming video links).
+To run the bot locally without Docker:
 
-**Deployment:**
-1. Navigate to the `bot/` directory.
-2. Install dependencies: `pip install -r requirements.txt`
-3. Install FFMPEG:
-   - Ubuntu/Debian: `sudo apt-get update && sudo apt-get install -y ffmpeg`
-   - MacOS: `brew install ffmpeg`
-4. Set your environment variables (`BOT_TOKEN`, `BOT_API_ID`, `BOT_API_HASH`, `MONGO_URI`) in a `.env` file or directly in your hosting provider's dashboard.
-5. Run the bot:
-    ```bash
-    python main.py
-    ```
+```bash
+# Optional: create a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install requirements
+pip install -r requirements.txt
+
+# Run the bot
+python main.py
+```
+
+*Note: Ensure `ffmpeg` is installed on your local machine if you want accurate video duration extraction.*

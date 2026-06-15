@@ -1,18 +1,24 @@
+import pyrogram.utils
+from pyrogram import Client
 import asyncio
-import logging
-import pyrogram
+from config import API_ID, API_HASH, BOT_TOKEN, DUMP_CHANNEL_ID, logger
 
-from core.bot import app
-from core.config import DUMP_CHANNEL_ID
-from handlers.commands import register_commands
-from handlers.messages import register_message_handlers
+# Monkey-patch Pyrogram's hardcoded limits to avoid "Peer id invalid" errors for newer channels
+pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
+pyrogram.utils.MIN_CHAT_ID = -9999999999999
 
-logger = logging.getLogger(__name__)
+# Initialize bot client
+# in_memory=True prevents SQLite DB creation/writes for peer caches which saves some background RAM/IO
+app = Client(
+    "terabox_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+    plugins=dict(root="handlers"),
+    in_memory=True
+)
 
 async def main():
-    register_commands(app)
-    register_message_handlers(app)
-
     await app.start()
     logger.info("Bot started.")
 
@@ -21,20 +27,22 @@ async def main():
             await app.get_chat(DUMP_CHANNEL_ID)
             logger.info(f"Successfully fetched DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) chat info.")
         except Exception as e:
-            # Silently fallback to raw API to cache the chat if standard get_chat fails
+            logger.warning(f"Could not fetch DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) directly: {e}. Attempting to resolve via raw API...")
             try:
                 from pyrogram.raw.functions.channels import GetChannels
                 from pyrogram.raw.types import InputChannel
-                import pyrogram.utils
 
                 channel_id = pyrogram.utils.get_channel_id(DUMP_CHANNEL_ID)
+                # For bots that are admins of the channel, access_hash=0 is allowed to fetch channel info
                 await app.invoke(GetChannels(id=[InputChannel(channel_id=channel_id, access_hash=0)]))
 
+                # Fetch again now that Pyrogram has cached the peer from the raw response
                 await app.get_chat(DUMP_CHANNEL_ID)
                 logger.info("Successfully fetched and cached DUMP_CHANNEL_ID using raw API.")
             except Exception as e2:
-                logger.error(f"Failed to resolve DUMP_CHANNEL_ID ({DUMP_CHANNEL_ID}) via raw API after standard method failed. Error: {e}. Raw fallback error: {e2}")
+                logger.error(f"Failed to resolve DUMP_CHANNEL_ID via raw API. Ensure the bot is an admin in the channel. Error: {e2}")
 
+    import pyrogram
     await pyrogram.idle()
     await app.stop()
     logger.info("Bot stopped.")
