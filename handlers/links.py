@@ -95,8 +95,19 @@ async def handle_link(client: Client, message: Message):
 
                 if isinstance(data, dict) and data.get("error"):
                     links = {"error": data.get("error", "Unknown API error")}
-                elif "data" in data:
+                elif "response" in data:
                     # Map flowvideoplayer output structure to bot expected structure
+                    links = [
+                        {
+                            "filename": item.get("file_name", "Unknown"),
+                            "size": item.get("file_size", "Unknown"),
+                            "direct_link": item.get("fast_stream_url") or item.get("download_url") or item.get("stream_final_url"),
+                            "thumbnail": item.get("thumbnail")
+                        }
+                        for item in data["response"]
+                    ]
+                elif "data" in data:
+                    # Map fallback structure
                     links = [
                         {
                             "filename": item.get("file_name", "Unknown"),
