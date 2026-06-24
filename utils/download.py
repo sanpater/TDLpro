@@ -15,7 +15,7 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
             "-protocol_whitelist", "file,http,https,tcp,tls,crypto",
             "-http_persistent", "1",
             "-http_multiple", "1",
-            "-threads", "4",
+            "-threads", "0",
             "-i", url,
             "-c", "copy",
             "-bsf:a", "aac_adtstoasc",
@@ -59,7 +59,7 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
         logger.error(f"ffmpeg_download error: {e}")
         return False
 
-async def fast_download(url, headers, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=20):
+async def fast_download(url, headers, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=35):
     """Downloads a file fast by using multiple concurrent connections if the server supports range requests."""
     # Create an explicit TCP connector with a low limit to prevent pooling overhead
     connector = aiohttp.TCPConnector(limit=max_concurrent)
@@ -111,7 +111,7 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                                     current_start += len(chunk)
 
                                     # Buffer up to 2MB to prevent RAM exhaustion and too many disk writes
-                                    if len(buffer) >= 2 * 1024 * 1024:
+                                    if len(buffer) >= 8 * 1024 * 1024:
                                         await f.write(buffer)
                                         buffer.clear()
 
@@ -166,7 +166,7 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                         buffer.extend(chunk)
                         downloaded += len(chunk)
 
-                        if len(buffer) >= 2 * 1024 * 1024:
+                        if len(buffer) >= 8 * 1024 * 1024:
                             await f.write(buffer)
                             buffer.clear()
 
