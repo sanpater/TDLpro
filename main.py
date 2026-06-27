@@ -2,20 +2,21 @@ import pyrogram.utils
 from pyrogram import Client
 import asyncio
 from config import API_ID, API_HASH, BOT_TOKEN, DUMP_CHANNEL_ID, logger
+from web import run_web_server
 
 # Monkey-patch Pyrogram's hardcoded limits to avoid "Peer id invalid" errors for newer channels
 pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
 pyrogram.utils.MIN_CHAT_ID = -9999999999999
 
 # Initialize bot client
-# in_memory=True prevents SQLite DB creation/writes for peer caches which saves some background RAM/IO
+# in_memory=False prevents SQLite DB creation/writes for peer caches which saves some background RAM/IO
 app = Client(
     "terabox_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
     plugins=dict(root="handlers"),
-    in_memory=True
+    in_memory=False
 )
 
 async def main():
@@ -48,5 +49,18 @@ async def main():
     logger.info("Bot stopped.")
 
 if __name__ == "__main__":
+    import traceback
+
+    logger.info("Starting web server on port 7860...")
+    try:
+        run_web_server()
+    except Exception as e:
+        logger.error(f"Failed to start web server: {e}")
+        logger.error(traceback.format_exc())
+
     logger.info("Starting bot...")
-    app.run(main())
+    try:
+        app.run(main())
+    except Exception as e:
+        logger.error(f"Bot stopped due to an exception: {e}")
+        logger.error(traceback.format_exc())

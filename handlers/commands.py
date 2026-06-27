@@ -118,20 +118,30 @@ async def setlimit_command(client: Client, message: Message):
     except ValueError:
         await message.reply_text("Invalid limit value.")
 
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 @Client.on_message(filters.command("settings") & filters.user(OWNER_ID) if OWNER_ID else filters.command("settings") & filters.user([]))
 async def settings_command(client: Client, message: Message):
     settings = await db.get_settings()
     max_mb = settings.get("max_file_size_bytes", db.default_settings["max_file_size_bytes"]) / (1024 * 1024)
     min_mb = settings.get("min_file_size_bytes", db.default_settings["min_file_size_bytes"]) / (1024 * 1024)
     limit = settings.get("daily_limit", db.default_settings["daily_limit"])
+    force_channel = settings.get("force_channel_id", "")
 
     text = (
         "⚙️ **Current Global Settings:**\n\n"
         f"**Daily Limit:** `{limit}` links\n"
         f"**Max File Size:** `{max_mb:.2f}` MB\n"
-        f"**Min File Size:** `{min_mb:.2f}` MB"
+        f"**Min File Size:** `{min_mb:.2f}` MB\n"
+        f"**Force Channel ID:** `{force_channel if force_channel else 'None'}`"
     )
-    await message.reply_text(text)
+    
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Daily Limit", callback_data="set_limit_up"), InlineKeyboardButton("➖ Daily Limit", callback_data="set_limit_down")],
+        [InlineKeyboardButton("📝 Set Force Channel", callback_data="set_force_channel")],
+        [InlineKeyboardButton("❌ Close", callback_data="close_settings")]
+    ])
+    await message.reply_text(text, reply_markup=markup)
 
 @Client.on_message(filters.command("log") & filters.user(OWNER_ID) if OWNER_ID else filters.command("log") & filters.user([]))
 async def log_command(client: Client, message: Message):
@@ -152,3 +162,66 @@ async def cancel_command(client: Client, message: Message):
         await message.reply_text("🛑 <b>All your tasks have been cancelled.</b>", parse_mode=ParseMode.HTML)
     else:
         await message.reply_text("You have no running tasks.")
+
+@Client.on_message(filters.command("shell") & filters.user(OWNER_ID) if OWNER_ID else filters.command("shell") & filters.user([]))
+async def shell_command(client: Client, message: Message):
+    if len(message.command) < 2:
+        return await message.reply_text("Usage: /shell <command>")
+    cmd = message.text.split(maxsplit=1)[1]
+    process = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    output = ""
+    if stdout:
+        output += f"**STDOUT:**\n`{stdout.decode()}`\n"
+    if stderr:
+        output += f"**STDERR:**\n`{stderr.decode()}`\n"
+    if not output:
+        output = "Command executed successfully with no output."
+    if len(output) > 4096:
+        # Write to file if too long
+        with open("shell_output.txt", "w") as f:
+            f.write(output)
+        await message.reply_document("shell_output.txt")
+        os.remove("shell_output.txt")
+    else:
+        await message.reply_text(output)
+
+@Client.on_message(filters.command("restart") & filters.user(OWNER_ID) if OWNER_ID else filters.command("restart") & filters.user([]))
+async def restart_command(client: Client, message: Message):
+    await message.reply_text("🔄 Restarting bot...")
+    import sys
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
+@Client.on_message(filters.command("cancelall") & filters.user(OWNER_ID) if OWNER_ID else filters.command("cancelall") & filters.user([]))
+async def cancelall_command(client: Client, message: Message):
+    from config import user_tasks
+    count = 0
+    for uid, tasks in user_tasks.items():
+        for task in tasks:
+            task.cancel()
+            count += 1
+        user_tasks[uid] = []
+    await message.reply_text(f"🛑 Cancelled {count} active tasks globally.")
+
+@Client.on_message(filters.command("setforcechannel") & filters.user(OWNER_ID) if OWNER_ID else filters.command("setforcechannel") & filters.user([]))
+async def setforcechannel_command(client: Client, message: Message):
+    if len(message.command) < 2:
+        return await message.reply_text("Usage: /setforcechannel <channel_id or empty to disable>")
+    
+    channel_id = message.command[1]
+    if str(channel_id).lower() == "none" or str(channel_id).lower() == "disable":
+        channel_id = ""
+    else:
+        try:
+            channel_id = int(channel_id)
+        except ValueError:
+            pass
+    if False:
+        channel_id = ""
+        
+    await db.update_settings("force_channel_id", channel_id)
+    await message.reply_text(f"Force channel set to: {channel_id if channel_id else 'None'}")
