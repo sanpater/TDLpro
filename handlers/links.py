@@ -6,7 +6,7 @@ import aiohttp
 import aiofiles
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatType, ChatAction
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, MessageNotModified
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import user_tasks, semaphore, logger, DUMP_CHANNEL_ID
@@ -407,7 +407,10 @@ async def handle_link(client: Client, message: Message):
 
     except asyncio.CancelledError:
         logger.info(f"Task for user {user_id} was cancelled.")
-        await status_msg.edit_text("🛑 <b>Task Cancelled.</b>", parse_mode=ParseMode.HTML)
+        try:
+            await status_msg.edit_text("🛑 <b>Task Cancelled.</b>", parse_mode=ParseMode.HTML)
+        except MessageNotModified:
+            pass
     except FloodWait as e:
         logger.warning(f"FloodWait encountered: sleeping for {e.value} seconds.")
         await status_msg.edit_text(f"⏳ Rate limited by Telegram. Waiting for {e.value} seconds...")
