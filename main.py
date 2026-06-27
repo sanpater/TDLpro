@@ -9,14 +9,14 @@ pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
 pyrogram.utils.MIN_CHAT_ID = -9999999999999
 
 # Initialize bot client
-# in_memory=True prevents SQLite DB creation/writes for peer caches which saves some background RAM/IO
+# in_memory=False prevents SQLite DB creation/writes for peer caches which saves some background RAM/IO
 app = Client(
     "terabox_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
     plugins=dict(root="handlers"),
-    in_memory=True
+    in_memory=False
 )
 
 async def main():

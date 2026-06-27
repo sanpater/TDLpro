@@ -1,3 +1,4 @@
+import gc
 import os
 import aiohttp
 import aiofiles
@@ -59,7 +60,110 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
         logger.error(f"ffmpeg_download error: {e}")
         return False
 
-async def fast_download(url, headers, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=35):
+
+import urllib.parse
+
+async def download_m3u8_concurrently(url, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=20):
+    connector = aiohttp.TCPConnector(limit=max_concurrent)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        # Fetch playlist
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return False
+            m3u8_content = await resp.text()
+
+        # Parse segments
+        segments = []
+        lines = m3u8_content.splitlines()
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                # Handle relative URLs
+                segment_url = urllib.parse.urljoin(url, line)
+                segments.append(segment_url)
+                
+        if not segments:
+            logger.error("No segments found in m3u8")
+            return False
+            
+        total_segments = len(segments)
+        segment_files = [f"{filepath}.seg{i}" for i in range(total_segments)]
+        downloaded_bytes = [0] * total_segments
+        total_size_estimate = 0
+        
+        # Download segment function
+        async def download_segment(i, seg_url):
+            retries = 3
+            while retries > 0:
+                try:
+                    async with session.get(seg_url) as seg_resp:
+                        if seg_resp.status != 200:
+                            retries -= 1
+                            await asyncio.sleep(1)
+                            continue
+                        
+                        data = await seg_resp.read()
+                        downloaded_bytes[i] = len(data)
+                        
+                        async with aiofiles.open(segment_files[i], "wb") as sf:
+                            await sf.write(data)
+                        
+                                                # Rough progress update
+                        current_total = sum(downloaded_bytes)
+                        completed_segments = sum(1 for b in downloaded_bytes if b > 0)
+                        if completed_segments > 0:
+                            avg_size = current_total / completed_segments
+                            estimated_total = int(avg_size * total_segments)
+                        else:
+                            estimated_total = 0
+                        await progress_bar(current_total, estimated_total, status_msg, action_text, start_time, last_update_time)
+                        return True
+                except Exception as e:
+                    retries -= 1
+                    await asyncio.sleep(1)
+            return False
+
+        # Queue tasks with bounded concurrency
+        semaphore = asyncio.Semaphore(max_concurrent)
+        async def sem_download(i, seg_url):
+            async with semaphore:
+                return await download_segment(i, seg_url)
+
+        tasks = [sem_download(i, seg) for i, seg in enumerate(segments)]
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        except asyncio.CancelledError:
+            for sf in segment_files:
+                if os.path.exists(sf):
+                    os.remove(sf)
+            raise
+            
+        if not all(r is True for r in results if not isinstance(r, Exception)):
+            logger.error("Some segments failed to download")
+            # Cleanup
+            for sf in segment_files:
+                if os.path.exists(sf):
+                    os.remove(sf)
+            return False
+
+        # Merge segments
+        async with aiofiles.open(filepath, "wb") as outfile:
+            for sf in segment_files:
+                if os.path.exists(sf):
+                    async with aiofiles.open(sf, "rb") as infile:
+                        data = await infile.read()
+                        await outfile.write(data)
+                    os.remove(sf)
+        return True
+
+async def m3u8_download(url, filepath, status_msg, action_text, start_time, last_update_time):
+    # Fallback to ffmpeg if the python downloader fails
+    success = await download_m3u8_concurrently(url, filepath, status_msg, action_text, start_time, last_update_time)
+    if success:
+        return True
+    return await ffmpeg_download(url, filepath, status_msg, action_text, start_time, last_update_time)
+
+async def fast_download(url, headers, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=10):
     """Downloads a file fast by using multiple concurrent connections if the server supports range requests."""
     # Create an explicit TCP connector with a low limit to prevent pooling overhead
     connector = aiohttp.TCPConnector(limit=max_concurrent)
@@ -111,7 +215,7 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                                     current_start += len(chunk)
 
                                     # Buffer up to 2MB to prevent RAM exhaustion and too many disk writes
-                                    if len(buffer) >= 8 * 1024 * 1024:
+                                    if len(buffer) >= 1024 * 1024:
                                         await f.write(buffer)
                                         buffer.clear()
 
@@ -142,7 +246,7 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                     part_file = f"{filepath}.part{i}"
                     async with aiofiles.open(part_file, "rb") as infile:
                         while True:
-                            chunk = await infile.read(10 * 1024 * 1024)
+                            chunk = await infile.read(2 * 1024 * 1024)
                             if not chunk:
                                 break
                             await outfile.write(chunk)
@@ -166,7 +270,7 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                         buffer.extend(chunk)
                         downloaded += len(chunk)
 
-                        if len(buffer) >= 8 * 1024 * 1024:
+                        if len(buffer) >= 1024 * 1024:
                             await f.write(buffer)
                             buffer.clear()
 

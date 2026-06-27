@@ -1,3 +1,4 @@
+import gc
 import os
 import time
 import asyncio
@@ -13,7 +14,7 @@ from core.database import db
 from core.flowapi import get_flowvideo_links
 from utils.helpers import format_bytes, format_time, get_video_duration
 from utils.progress import progress_bar
-from utils.download import fast_download, ffmpeg_download
+from utils.download import fast_download, ffmpeg_download, m3u8_download
 
 @Client.on_message(filters.text & filters.regex(r"http[s]?://[^\s]+"))
 async def handle_link(client: Client, message: Message):
@@ -28,6 +29,27 @@ async def handle_link(client: Client, message: Message):
     allowed = await db.check_and_update_limit(user_id)
     if not allowed:
         return await message.reply_text("❌ You have reached your daily limit of 10 links. Please try again tomorrow or contact the owner.")
+
+    # Force Channel check
+    settings = await db.get_settings()
+    force_channel_id = settings.get("force_channel_id", "")
+    if force_channel_id:
+        try:
+            # We check if user is a member of the channel
+            member = await client.get_chat_member(force_channel_id, user_id)
+            if member.status in ["ChatMemberStatus.KICKED", "ChatMemberStatus.LEFT", "ChatMemberStatus.BANNED", "kicked", "left", "banned"] or str(member.status) in ["ChatMemberStatus.KICKED", "ChatMemberStatus.LEFT", "ChatMemberStatus.BANNED", "kicked", "left", "banned"]:
+                raise Exception("Not a member")
+        except Exception:
+            try:
+                chat = await client.get_chat(force_channel_id)
+                channel_link = chat.invite_link or chat.username
+                if not channel_link:
+                    channel_link = force_channel_id
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_link}")]])
+            except Exception:
+                markup = None
+            return await message.reply_text("❌ You must join our channel to use this bot.", reply_markup=markup)
+
 
     current_task = asyncio.current_task()
 
@@ -216,12 +238,13 @@ async def handle_link(client: Client, message: Message):
 
                     start_time = time.time()
                     last_update_time = [0]
+                    success = False
                     action_text = f"Downloading: {filename}"
 
                     # Download main file fast
                     # No cookies are passed, TeraBox direct links usually work without them for the specific short-lived token
                     if is_m3u8:
-                        success = await ffmpeg_download(
+                        success = await m3u8_download(
                             direct_link,
                             temp_file_dl,
                             status_msg,
@@ -402,3 +425,4 @@ async def handle_link(client: Client, message: Message):
                 await message.delete()
             except Exception as e:
                 logger.warning(f"Could not delete original link message in group: {e}")
+        gc.collect()

@@ -8,7 +8,7 @@ from utils.helpers import format_bytes, format_time
 async def progress_bar(current, total, status_msg, action_text, start_time, last_update_time):
     now = time.time()
     # Update every 2 seconds
-    if now - last_update_time[0] < 3.0 and current != total:
+    if now - last_update_time[0] < 5.0 and current != total:
         return
 
     last_update_time[0] = now
