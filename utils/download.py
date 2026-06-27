@@ -65,7 +65,8 @@ import urllib.parse
 
 async def download_m3u8_concurrently(url, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=20):
     connector = aiohttp.TCPConnector(limit=max_concurrent)
-    async with aiohttp.ClientSession(connector=connector) as session:
+    timeout = aiohttp.ClientTimeout(total=None, sock_read=30, sock_connect=30)
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         # Fetch playlist
         async with session.get(url) as resp:
             if resp.status != 200:
@@ -167,7 +168,8 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
     """Downloads a file fast by using multiple concurrent connections if the server supports range requests."""
     # Create an explicit TCP connector with a low limit to prevent pooling overhead
     connector = aiohttp.TCPConnector(limit=max_concurrent)
-    async with aiohttp.ClientSession(connector=connector) as session:
+    timeout = aiohttp.ClientTimeout(total=None, sock_read=30, sock_connect=30)
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         # Check if the server supports range requests
         async with session.head(url, headers=headers, allow_redirects=True) as resp:
             total_size = int(resp.headers.get("content-length", 0))
@@ -225,6 +227,12 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                         # If we break cleanly and current_start is strictly greater than end, chunk is fully downloaded
                         if current_start > end:
                             break
+                        else:
+                            retries -= 1
+                            logger.warning(f"Chunk {i} connection closed prematurely. Retrying... ({retries} left)")
+                            await asyncio.sleep(2)
+                            if retries <= 0:
+                                raise Exception(f"Chunk {i} incomplete.")
 
                     except (aiohttp.ClientPayloadError, aiohttp.ClientError, asyncio.TimeoutError) as e:
                         retries -= 1
@@ -236,6 +244,9 @@ async def fast_download(url, headers, filepath, status_msg, action_text, start_t
                     except Exception as e:
                         logger.error(f"Unexpected error in chunk {i}: {e}")
                         raise e
+
+                if current_start <= end:
+                    raise Exception(f"Chunk {i} failed to download completely after all retries.")
 
             tasks = [download_chunk(i, start, end) for i, (start, end) in enumerate(ranges)]
             await asyncio.gather(*tasks)
