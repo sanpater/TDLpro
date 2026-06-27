@@ -407,7 +407,10 @@ async def handle_link(client: Client, message: Message):
 
     except asyncio.CancelledError:
         logger.info(f"Task for user {user_id} was cancelled.")
-        await status_msg.edit_text("🛑 <b>Task Cancelled.</b>", parse_mode=ParseMode.HTML)
+        try:
+            await status_msg.edit_text("🛑 <b>Task Cancelled.</b>", parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
     except FloodWait as e:
         logger.warning(f"FloodWait encountered: sleeping for {e.value} seconds.")
         await status_msg.edit_text(f"⏳ Rate limited by Telegram. Waiting for {e.value} seconds...")

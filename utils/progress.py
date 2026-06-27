@@ -1,7 +1,7 @@
 import time
 import asyncio
 from pyrogram.enums import ParseMode
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, MessageNotModified
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.helpers import format_bytes, format_time
 
@@ -49,5 +49,7 @@ async def progress_bar(current, total, status_msg, action_text, start_time, last
         await status_msg.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
     except FloodWait as e:
         await asyncio.sleep(e.value)
+    except MessageNotModified:
+        pass
     except Exception:
         pass
