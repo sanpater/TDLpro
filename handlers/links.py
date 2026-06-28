@@ -6,7 +6,7 @@ import aiohttp
 import aiofiles
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatType, ChatAction
-from pyrogram.errors import FloodWait, MessageNotModified
+from pyrogram.errors import FloodWait
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import user_tasks, semaphore, logger, DUMP_CHANNEL_ID
@@ -19,6 +19,7 @@ from utils.download import fast_download, ffmpeg_download, m3u8_download
 @Client.on_message(filters.text & filters.regex(r"http[s]?://[^\s]+"))
 async def handle_link(client: Client, message: Message):
     user_id = message.from_user.id
+    success = False
 
     # Check block status
     user = await db.get_user(user_id)
@@ -45,7 +46,7 @@ async def handle_link(client: Client, message: Message):
                 channel_link = chat.invite_link or chat.username
                 if not channel_link:
                     channel_link = force_channel_id
-                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel", url=f"https://t.me/{channel_link}")]])
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel", url=f"{channel_link}")]])
             except Exception:
                 markup = None
             return await message.reply_text("❌ You must join our channel to use this bot.", reply_markup=markup)
@@ -238,7 +239,6 @@ async def handle_link(client: Client, message: Message):
 
                     start_time = time.time()
                     last_update_time = [0]
-                    success = False
                     action_text = f"Downloading: {filename}"
 
                     # Download main file fast
@@ -409,7 +409,7 @@ async def handle_link(client: Client, message: Message):
         logger.info(f"Task for user {user_id} was cancelled.")
         try:
             await status_msg.edit_text("🛑 <b>Task Cancelled.</b>", parse_mode=ParseMode.HTML)
-        except MessageNotModified:
+        except Exception:
             pass
     except FloodWait as e:
         logger.warning(f"FloodWait encountered: sleeping for {e.value} seconds.")
