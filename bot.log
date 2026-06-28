@@ -1,0 +1,2 @@
+2026-06-28 22:00:22,434 - terabox_bot - WARNING - Bot credentials are not fully set. Please check your .env file.
+2026-06-28 22:00:24,006 - pyrogram.crypto.aes - INFO - Using TgCrypto
