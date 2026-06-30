@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     ca-certificates \
     ffmpeg=7:6.1.1-3ubuntu5 \
+    aria2 \
     curl \
     tzdata \
     && rm -rf /var/lib/apt/lists/*

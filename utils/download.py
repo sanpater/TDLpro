@@ -6,8 +6,8 @@ import asyncio
 from config import logger
 from utils.progress import progress_bar
 
-async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, last_update_time):
-    """Downloads an m3u8/HLS stream using ffmpeg (renamed to lolas)."""
+async def lolas_download(url, filepath, status_msg, action_text, start_time, last_update_time):
+    """Downloads an m3u8/HLS stream using lolas (renamed to lolas)."""
     try:
         cmd = [
             "lolas",
@@ -32,7 +32,7 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
         # Periodically update status while downloading
         async def monitor_process():
             while process.returncode is None:
-                # We can't easily get precise progress from ffmpeg without parsing stderr deeply,
+                # We can't easily get precise progress from lolas without parsing stderr deeply,
                 # but we can at least show it's working
                 await asyncio.sleep(5)
                 try:
@@ -49,7 +49,7 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
         monitor_task.cancel()
 
         if process.returncode != 0:
-            logger.error(f"ffmpeg failed: {stderr.decode()}")
+            logger.error(f"lolas failed: {stderr.decode()}")
             return False
 
         if os.path.exists(filepath):
@@ -57,111 +57,166 @@ async def ffmpeg_download(url, filepath, status_msg, action_text, start_time, la
         return False
 
     except Exception as e:
-        logger.error(f"ffmpeg_download error: {e}")
+        logger.error(f"lolas_download error: {e}")
         return False
+
 
 
 import urllib.parse
 
-async def download_m3u8_concurrently(url, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=20):
-    connector = aiohttp.TCPConnector(limit=max_concurrent)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        # Fetch playlist
-        async with session.get(url) as resp:
-            if resp.status != 200:
+async def download_m3u8_concurrently_fast(url, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=30):
+    connector = aiohttp.TCPConnector(limit=10)
+    timeout = aiohttp.ClientTimeout(total=30)
+
+    aria2_input_file = f"{filepath}.aria2.txt"
+    concat_file = f"{filepath}.concat.txt"
+    segment_files = []
+
+    try:
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            # Fetch playlist
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.error(f"Failed to fetch m3u8 playlist: {resp.status}")
+                    return False
+                m3u8_content = await resp.text()
+
+            # Parse segments
+            segments = []
+            lines = m3u8_content.splitlines()
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    segment_url = urllib.parse.urljoin(url, line)
+                    segments.append(segment_url)
+
+            if not segments:
+                logger.error("No segments found in m3u8")
                 return False
-            m3u8_content = await resp.text()
 
-        # Parse segments
-        segments = []
-        lines = m3u8_content.splitlines()
-        for line in lines:
-            line = line.strip()
-            if line and not line.startswith('#'):
-                # Handle relative URLs
-                segment_url = urllib.parse.urljoin(url, line)
-                segments.append(segment_url)
-                
-        if not segments:
-            logger.error("No segments found in m3u8")
-            return False
-            
-        total_segments = len(segments)
-        segment_files = [f"{filepath}.seg{i}" for i in range(total_segments)]
-        downloaded_bytes = [0] * total_segments
-        total_size_estimate = 0
-        
-        # Download segment function
-        async def download_segment(i, seg_url):
-            retries = 3
-            while retries > 0:
-                try:
-                    async with session.get(seg_url) as seg_resp:
-                        if seg_resp.status != 200:
-                            retries -= 1
-                            await asyncio.sleep(1)
-                            continue
-                        
-                        data = await seg_resp.read()
-                        downloaded_bytes[i] = len(data)
-                        
-                        async with aiofiles.open(segment_files[i], "wb") as sf:
-                            await sf.write(data)
-                        
-                                                # Rough progress update
-                        current_total = sum(downloaded_bytes)
-                        completed_segments = sum(1 for b in downloaded_bytes if b > 0)
-                        if completed_segments > 0:
-                            avg_size = current_total / completed_segments
-                            estimated_total = int(avg_size * total_segments)
-                        else:
-                            estimated_total = 0
-                        await progress_bar(current_total, estimated_total, status_msg, action_text, start_time, last_update_time)
-                        return True
-                except Exception as e:
-                    retries -= 1
-                    await asyncio.sleep(1)
-            return False
+            total_segments = len(segments)
+            segment_files = [f"{filepath}.seg{i}.ts" for i in range(total_segments)]
 
-        # Queue tasks with bounded concurrency
-        semaphore = asyncio.Semaphore(max_concurrent)
-        async def sem_download(i, seg_url):
-            async with semaphore:
-                return await download_segment(i, seg_url)
+            # Write aria2 input file
+            async with aiofiles.open(aria2_input_file, "w") as f:
+                for i, seg_url in enumerate(segments):
+                    await f.write(f"{seg_url}\n")
+                    # Use basename for out= to avoid absolute path issues with aria2c -d
+                    await f.write(f"  out={os.path.basename(segment_files[i])}\n")
 
-        tasks = [sem_download(i, seg) for i, seg in enumerate(segments)]
-        try:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-        except asyncio.CancelledError:
-            for sf in segment_files:
-                if os.path.exists(sf):
-                    os.remove(sf)
-            raise
-            
-        if not all(r is True for r in results if not isinstance(r, Exception)):
-            logger.error("Some segments failed to download")
-            # Cleanup
-            for sf in segment_files:
-                if os.path.exists(sf):
-                    os.remove(sf)
-            return False
+            # Run aria2c
+            try:
+                cmd = [
+                    "aria2c",
+                    "-i", aria2_input_file,
+                    "-j", str(max_concurrent),
+                    "-x", "16",
+                    "-s", "16",
+                    "--min-split-size=1M",
+                    "--summary-interval=0",
+                    "--console-log-level=error",
+                    "-d", os.path.dirname(os.path.abspath(filepath)) or "."
+                ]
 
-        # Merge segments
-        async with aiofiles.open(filepath, "wb") as outfile:
-            for sf in segment_files:
-                if os.path.exists(sf):
-                    async with aiofiles.open(sf, "rb") as infile:
-                        data = await infile.read()
-                        await outfile.write(data)
-                    os.remove(sf)
-        return True
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+
+                # Periodically update status while downloading
+                async def monitor_process():
+                    while process.returncode is None:
+                        await asyncio.sleep(2)
+                        try:
+                            # Use asyncio.to_thread for blocking I/O calls
+                            def calculate_progress():
+                                current_tot = 0
+                                completed_segs = 0
+                                for sf in segment_files:
+                                    if os.path.exists(sf):
+                                        sz = os.path.getsize(sf)
+                                        current_tot += sz
+                                        if sz > 0:
+                                            completed_segs += 1
+                                return current_tot, completed_segs
+
+                            current_total, completed_segments = await asyncio.to_thread(calculate_progress)
+
+                            # Guess total based on current average
+                            if completed_segments > 0:
+                                avg_size = current_total / completed_segments
+                                estimated_total = int(avg_size * total_segments)
+                            else:
+                                estimated_total = 0
+
+                            await progress_bar(current_total, estimated_total, status_msg, action_text, start_time, last_update_time)
+                        except Exception:
+                            pass
+
+                monitor_task = asyncio.create_task(monitor_process())
+                stdout, stderr = await process.communicate()
+                monitor_task.cancel()
+
+                if process.returncode != 0:
+                    logger.error(f"aria2c failed: {stderr.decode()}")
+                    return False
+
+            except Exception as e:
+                logger.error(f"aria2c error: {e}")
+                return False
+
+            # Write concat list for lolas
+            async with aiofiles.open(concat_file, "w") as f:
+                for sf in segment_files:
+                    if os.path.exists(sf):
+                        await f.write(f"file '{os.path.abspath(sf)}'\n")
+
+            # Use lolas to mux
+            try:
+                cmd = [
+                    "lolas",
+                    "-y",
+                    "-f", "concat",
+                    "-safe", "0",
+                    "-i", concat_file,
+                    "-c", "copy",
+                    "-bsf:a", "aac_adtstoasc",
+                    filepath
+                ]
+
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+
+                if process.returncode != 0:
+                    logger.error(f"lolas mux failed: {stderr.decode()}")
+                    return False
+            except Exception as e:
+                logger.error(f"lolas mux error: {e}")
+                return False
+
+            return os.path.exists(filepath)
+    finally:
+        # Guarantee cleanup of all temp files regardless of success/failure
+        if os.path.exists(aria2_input_file):
+            os.remove(aria2_input_file)
+        if os.path.exists(concat_file):
+            os.remove(concat_file)
+        for sf in segment_files:
+            if os.path.exists(sf):
+                os.remove(sf)
 
 async def m3u8_download(url, filepath, status_msg, action_text, start_time, last_update_time):
-    # Fallback to ffmpeg if the python downloader fails
-    success = await download_m3u8_concurrently(url, filepath, status_msg, action_text, start_time, last_update_time)
+    # Try fast concurrent aria2 download first, which uses lolas for final muxing
+    success = await download_m3u8_concurrently_fast(url, filepath, status_msg, action_text, start_time, last_update_time)
     if success:
         return True
-    return await ffmpeg_download(url, filepath, status_msg, action_text, start_time, last_update_time)
+    # Fallback to slow lolas-only download if it fails
+    return await lolas_download(url, filepath, status_msg, action_text, start_time, last_update_time)
 
 async def fast_download(url, headers, filepath, status_msg, action_text, start_time, last_update_time, max_concurrent=10):
     """Downloads a file fast by using multiple concurrent connections if the server supports range requests."""
